@@ -1,10 +1,13 @@
 '''
 Comments
 1. Add sound
+2. Add laser
+3. Add button and doors
 '''
 
 from cmu_graphics import *
 import math
+import copy
 
 # PLEASE CHANGE THIS vvvvvvvvvvvvvvvvvvvvvvvv
 GAMEPATH = "C:/Users/dilsh/Desktop/CMUQ/15112"
@@ -104,11 +107,12 @@ class Mover:
             
 class Hero(Mover):
     def __init__(self, x, y):
-        w = 40
+        w = 20
         h = 50
         super().__init__(x, y, w, h, rgb(10,10,10))
         self.dead = False
         self.onLadder = False
+        self.margin = w // 2
 
         self.imageUrls = [None] + [f'{GAMEPATH}/hue_{i}.png' for i in range(1, 19)]
 
@@ -145,6 +149,11 @@ class Hero(Mover):
 
         for s in myApp.spikes:
             if s.isTouching(self.x, self.y) or s.isTouching(self.x + self.w, self.y):
+                self.dead = True
+                return
+        
+        for las in myApp.lasers:
+            if las.isTouching(self):
                 self.dead = True
                 return
     
@@ -190,8 +199,8 @@ class Hero(Mover):
 
         length = int(5 / myApp.speed)
         i = (self.steps // length) % len(ids)
-        drawImage(self.imageUrls[ids[i]], x, y, width=self.w, height=self.h, align='top-left')
-    
+        #drawRect(x, y, self.w, self.h, fill='white')
+        drawImage(self.imageUrls[ids[i]], x - self.margin, y, width=self.w + 2 * self.margin, height=self.h, align='top-left')
 
 class Spike:
     def __init__(self, x, y, cnt, color='black'):
@@ -319,6 +328,12 @@ def getGround(x, y, skip=None): # return delta + 1 or False (weird, but works)
         if bl.color != myApp.background and bl.isTouching(x, y):
             return bl.getDelta(x, y)
     
+    for ga in myApp.gates:
+        if ga == skip:
+            continue
+        if ga.isTouching(x, y):
+            return ga.getDeltaBottom(x, y)
+    
     return False
 
 def getGroundBottom(x, y, skip=None):
@@ -339,6 +354,12 @@ def getGroundBottom(x, y, skip=None):
             continue
         if bl.color != myApp.background and bl.isTouching(x, y):
             return bl.getDeltaBottom(x, y)
+    
+    for ga in myApp.gates:
+        if ga == skip:
+            continue
+        if ga.isTouching(x, y):
+            return ga.getDeltaBottom(x, y)
         
     return False
 
@@ -363,6 +384,11 @@ def getAllSides(x1, y1, x2 = None, y2 = None, skip = None):
             continue
         if bl.color != myApp.background:
             res = res.union(bl.getSides(x1, y1, x2, y2))
+
+    for ga in myApp.gates:
+        if ga == skip:
+            continue
+        res = res.union(ga.getSides(x1, y1, x2, y2))
     
     return res
 
@@ -507,6 +533,9 @@ class Block(Barrier):
         else:
             self.vx = 0
         
+        if self.vx != 0 and myApp.debugging:
+            print(str(self))
+        
         super().onStep()
 
     def destructButton(self):
@@ -532,6 +561,122 @@ class Ladder:
     def isInside(self, x, y):
         return self.x <= x <= self.x + self.w and self.y - self.h * self.w <= y <= self.y
 
+class Laser:
+    def __init__(self, x1, y1, x2, y2, color, r=15):
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.color = color
+        self.r = r
+    
+    def draw(self):
+        x1 = self.x1 - myApp.viewLeft
+        y1 = self.y1 - myApp.viewTop
+        x2 = self.x2 - myApp.viewLeft
+        y2 = self.y2 - myApp.viewTop
+
+        drawRect(x1, y1, self.r * 2, self.r * 2, align='center', fill=myApp.background)
+        if myApp.mousePressed:
+            drawRect(x1, y1, self.r * 2, self.r * 2, align='center', fill='black', opacity=50)
+        
+        drawCircle(x1, y1, self.r, fill=self.color, border='black')
+        
+        if self.color != myApp.background:
+            drawLine(x1, y1, x2, y2, fill=self.color, lineWidth=5)
+        
+        t = 8
+        dx, dy = 0, 0
+        if self.x1 == self.x2:
+            dy += (self.r + t / 2) * (-1 if self.y1 > self.y2 else 1)
+        else:
+            dx += (self.r + t / 2) * (-1 if self.x1 > self.x2 else 1)
+
+        drawRect(x1 + dx, y1 + dy, t, t, fill='black', align='center')
+
+    def isTouching(self, hue):
+        if self.color == myApp.background:
+            return False
+        
+        if self.x1 == self.x2: #vertical laser
+            if not (hue.x <= self.x1 <= hue.x + hue.w):
+                return False
+            ly = min(self.y1, self.y2)
+            ry = max(self.y1, self.y2)
+            return max(ly, hue.y - hue.h) <= min(ry, hue.y)
+        
+        if self.y1 == self.y2: #horizontal laser
+            if not (hue.y - hue.h <= self.y1 <= hue.y):
+                return False
+            lx = min(self.x1, self.x2)
+            rx = max(self.x1, self.x2)
+            return max(lx, hue.x) <= min(rx, hue.x + hue.w)
+
+class Gate(Ground):
+    def __init__(self, x, y1, y2, button, w=20):
+        super().__init__(x - w / 2, y1, w, y2 - y1)
+        self.originalH = y2 - y1
+        self.button = button
+        self.vh = 1
+
+        if myApp.debugging:
+            print(self.x, self.y, self.w, self.h)
+
+    def __repr__(self):
+        return f"Gate(x={self.x}, y={self.y}, w={self.w}, h={self.h})"
+
+    def draw(self):
+        x = self.x - myApp.viewLeft
+        y = self.y - myApp.viewTop
+
+        drawRect(x - self.w / 2, y - self.w, self.w * 2, self.w)
+
+        drawRect(x, y, self.w, self.h)
+
+    def onStep(self):
+        self.h += self.vh
+        self.h = max(1, self.h)
+        self.h = min(self.originalH, self.h)
+
+class Button:
+    def __init__(self, x, y, gate, w=80, h=10):
+        self.x = x
+        self.y = y
+        self.gate = gate
+        self.w = w
+        self.h = h
+        self.isActive = False
+
+    def __repr__(self):
+        return f"Button(x={self.x}, y={self.y}, w={self.w}, h={self.h}, isActive={self.isActive})"
+
+    def draw(self):
+        if self.isActive:
+            return
+
+        x = self.x - myApp.viewLeft
+        y = self.y - myApp.viewTop
+        h = self.h
+        drawRect(x + h, y - self.h, self.w - 2 * h, self.h)
+        drawCircle(x + h, y, h)
+        drawCircle(x + self.w - h, y, h)
+
+    def isTouching(self, x, y):
+        return self.x <= x <= self.x + self.w and self.y - self.h <= y <= self.y
+
+    def onStep(self):
+        if self.isTouching(myApp.hue.x, myApp.hue.y) or self.isTouching(myApp.hue.x + myApp.hue.w, myApp.hue.y):
+            self.isActive = True
+            self.gate.vh = -1
+            return
+        
+        if 'bottom' in getAllSides(self.x, self.y - self.h, self.x + self.w, self.y):
+            self.isActive = True
+            self.gate.vh = -1
+        else:
+            self.isActive = False
+            self.gate.vh = 1
+
 def startLevel(app, level):
     app.hue = Hero(0, 0)
     app.grounds = []
@@ -539,6 +684,10 @@ def startLevel(app, level):
     app.barriers = []
     app.blocks = []
     app.ladders = []
+    app.lasers = []
+    
+    gates = []
+    buttons = []
 
     global GAMEPATH
     f = open(f"{GAMEPATH}/level{level}.txt", "r")
@@ -546,7 +695,9 @@ def startLevel(app, level):
         data = list(s.split())
         obj = data[0]
         data = list(int(s) for s in data[1:])
-        print(obj, data)
+        
+        if app.debugging:
+            print(obj, data)
 
         if obj == 'hero':
             app.hue = Hero(data[0], data[1])
@@ -566,6 +717,25 @@ def startLevel(app, level):
         
         if obj == 'ladder':
             app.ladders.append(Ladder(data[0], data[1], data[2]))
+
+        if obj == 'laser':
+            app.lasers.append(Laser(data[0], data[1], data[2], data[3], app.colors[data[4]]))
+
+        if obj == 'gate':
+            gates.append(Gate(data[0], data[1], data[2], 5))
+
+        if obj == 'button':
+            buttons.append(Button(data[0], data[1], 5))
+
+    app.gates = gates
+    app.buttons = buttons
+
+    assert(len(gates) == len(buttons))
+    for i in range(len(gates)):
+        ga = gates[i]
+        bu = buttons[i]
+        app.gates[i].button = bu
+        app.buttons[i].gate = ga
 
     app.hue.onLadder = False
 
@@ -630,9 +800,6 @@ def onAppStart(app):
     app.revPermutation = [1, 4, 6, 7, 5, 8, 3, 2]
 
     reset(app)
-    
-    for bl in app.blocks:
-        print(bl.getTop(), bl.getBottom())
 
 def onMousePress(app, mouseX, mouseY):
     if app.debugging:
@@ -828,6 +995,12 @@ def onStep(app):
     for bl in app.blocks:
         bl.onStep()
 
+    for ga in app.gates:
+        ga.onStep()
+
+    for bu in app.buttons:
+        bu.onStep()
+
 def drawPalette(app):
     x0 = app.hue.x + app.hue.w / 2 - app.viewLeft
     y0 = app.hue.y - app.hue.h / 2 - app.viewTop
@@ -864,8 +1037,8 @@ def redrawAll(app):
     for g in app.grounds:
         g.draw()
 
-    for l in app.ladders:
-        l.draw()
+    for lad in app.ladders:
+        lad.draw()
 
     for s in app.spikes:
         s.draw()
@@ -875,6 +1048,15 @@ def redrawAll(app):
 
     for bl in app.blocks:
         bl.draw()
+
+    for las in app.lasers:
+        las.draw()
+
+    for ga in app.gates:
+        ga.draw()
+    
+    for bu in app.buttons:
+        bu.draw()
 
     app.hue.draw()
 
