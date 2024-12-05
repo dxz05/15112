@@ -1,10 +1,3 @@
-'''
-Comments
-1. Add sound
-2. Add laser
-3. Add button and doors
-'''
-
 from cmu_graphics import *
 import math
 import copy
@@ -15,11 +8,22 @@ GAMEPATH = "C:/Users/dilsh/Desktop/CMUQ/15112"
 
 myApp = 0
 
-class Room:
-    def __init__(self, level, room):
+class Door:
+    def __init__(self, x, y, level, w = 50, h = 50):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
         self.level = level
-        self.room = room
-        self.background = myApp.colors[0]
+
+    def draw(self):
+        x = self.x - myApp.viewLeft
+        y = self.y - myApp.viewTop
+        drawRect(x, y - self.h, self.w, self.h, fill=myApp.colors[0])
+        drawCircle(x + self.w / 2, y - self.h, self.w / 2, fill=myApp.colors[0])
+    
+    def isInside(self, x, y):
+        return self.x <= x <= self.x + self.w and self.y - self.h <= y <= self.y
 
 class Mover:
     def __init__(self, x, y, w, h, color):
@@ -75,12 +79,12 @@ class Mover:
             if abs(self.y - prevY) >= val:
                 self.y -= val
                 self.vy = 0        
-        elif getGroundBottom(self.getLeft(), self.getTop(), self) != False:
+        elif getGroundBottom(self.getLeft(), self.getTop(), self) != False and self.vy < 0:
             val = getGroundBottom(self.getLeft(), self.getTop()) - 1
             if abs(self.y - prevY) >= val:
                 self.y += val
                 self.vy = 0
-        elif getGroundBottom(self.getRight(), self.getTop(), self) != False:
+        elif getGroundBottom(self.getRight(), self.getTop(), self) != False and self.vy < 0:
             val = getGroundBottom(self.getRight(), self.getTop()) - 1
             if abs(self.y - prevY) >= val:
                 self.y += val
@@ -111,10 +115,11 @@ class Hero(Mover):
         h = 50
         super().__init__(x, y, w, h, rgb(10,10,10))
         self.dead = False
+        self.won = False
         self.onLadder = False
         self.margin = w // 2
 
-        self.imageUrls = [None] + [f'{GAMEPATH}/hue_{i}.png' for i in range(1, 19)]
+        self.imageUrls = [None] + [f'{GAMEPATH}/pic/hue_{i}.png' for i in range(1, 19)]
 
         self.direction = "right"
         self.condition = "steady"
@@ -137,7 +142,7 @@ class Hero(Mover):
             print(self.condition)
         
         self.steps += 1
-        if self.dead:
+        if self.dead or self.won:
             return
         super().onStep()
         
@@ -332,7 +337,7 @@ def getGround(x, y, skip=None): # return delta + 1 or False (weird, but works)
         if ga == skip:
             continue
         if ga.isTouching(x, y):
-            return ga.getDeltaBottom(x, y)
+            return ga.getDelta(x, y) # changed from getDeltaBottom to getDelta
     
     return False
 
@@ -452,11 +457,11 @@ class Block(Barrier):
         if self.color == myApp.background and other.color != myApp.background:
             return False
         
+        if self.y + self.h != other.y + other.h:
+            return self.y + self.h < other.y + other.h
+
         if self.x != other.x:
             return self.x < other.x
-        
-        if self.y != other.y:
-            return self.y < other.y
 
         return self.cnt < other.cnt
     
@@ -504,7 +509,7 @@ class Block(Barrier):
             drawLine(x + self.w / 2, y + self.h * 11 / 16, x + self.w / 2, y + self.h, fill=color, opacity=opacity)
 
     def onStep(self):
-        if self.y > 1000:
+        if self.y > 1700:
             self.destructButton()
             return
             
@@ -685,12 +690,19 @@ def startLevel(app, level):
     app.blocks = []
     app.ladders = []
     app.lasers = []
+    app.door = Door(0, 0, level)
+    app.level = level
     
     gates = []
     buttons = []
 
+    if app.level == 1:
+        app.colorSize = 2
+    else:
+        app.colorSize = 8
+
     global GAMEPATH
-    f = open(f"{GAMEPATH}/level{level}.txt", "r")
+    f = open(f"{GAMEPATH}/levels/level{level}.txt", "r")
     for s in f.read().splitlines():
         data = list(s.split())
         obj = data[0]
@@ -726,9 +738,13 @@ def startLevel(app, level):
 
         if obj == 'button':
             buttons.append(Button(data[0], data[1], 5))
+        
+        if obj == 'door':
+            app.door = Door(data[0], data[1], level)
 
     app.gates = gates
     app.buttons = buttons
+    app.background = app.colors[0]
 
     assert(len(gates) == len(buttons))
     for i in range(len(gates)):
@@ -739,6 +755,7 @@ def startLevel(app, level):
 
     app.hue.onLadder = False
 
+    app.blockGroups = []
     findBlockGroups(app)
 
 def isSorted(a):
@@ -751,6 +768,7 @@ def findBlockGroups(app):
     if not isSorted(app.blocks):
         app.blocks.sort()
 
+    prevSize = len(app.blockGroups)
     app.blockGroups = []
     app.blockMap = dict()
 
@@ -768,6 +786,10 @@ def findBlockGroups(app):
         while i < j:
             app.blockMap[app.blocks[i]] = len(app.blockGroups) - 1
             i += 1
+    
+    if app.debugging and len(app.blockGroups) == 4 and prevSize == 5:
+        for bl in app.blocks:
+            print(str(bl))
 
 def reset(app):
     global myApp
@@ -782,16 +804,23 @@ def reset(app):
     app.background = app.colors[0]
     app.mouseColor = 0
 
-    startLevel(app, 1)
+    app.colorSize = 8
+
+    startLevel(app, app.level)
     viewCheck(app)
 
 def onAppStart(app):
+    app.soundtrack = Sound("https://web2.qatar.cmu.edu/~dzk/hue_soundtrack.mp3")
+    app.soundtrack.play(restart=True, loop=True)
+
     app.debugging = False
+    app.maxLevel = 2
 
     if app.debugging:
         print("onAppStart()")
 
     app.stepsPerSecond = 60
+    app.level = 2
 
     app.colors = ['gray', 'deepSkyBlue', 'orange', 'magenta', 'deepPink', 'red', 'blue', 'yellow', 'lawnGreen']
     app.background = app.colors[0]
@@ -839,8 +868,12 @@ def getNextColor(app, mouseX, mouseY):
     if angle < 0:
         angle += 360
     
-    id = int(angle / 45) + 1
-    return id
+    id = int(angle / 45)
+
+    if app.permutation[id] > app.colorSize:
+        return -1
+
+    return id + 1
 
 def onMouseRelease(app, mouseX, mouseY):
     if app.debugging:
@@ -851,9 +884,9 @@ def onMouseRelease(app, mouseX, mouseY):
     app.mousePressed = False
 
     id = getNextColor(app, mouseX, mouseY)
-    id = app.permutation[id - 1]
     app.mouseColor = 0
     if id != -1:
+        id = app.permutation[id - 1]
         app.background = app.colors[id]
 
 def onKeyPress(app, key):
@@ -863,8 +896,14 @@ def onKeyPress(app, key):
     if key == 'r':
         reset(app)
 
-    if app.hue.dead:
+    if key == 'enter' and app.hue.won and app.level < app.maxLevel:
+        startLevel(app, app.level + 1)
+
+    if app.hue.dead or app.hue.won:
         return
+    
+    if key == 'w' and app.door.isInside(app.hue.x + app.hue.w / 2, app.hue.y - app.hue.h / 2):
+        app.hue.won = True
 
     viewCheck(app)
     
@@ -873,7 +912,7 @@ def onKeyRelease(app, key):
     if app.debugging:
         print(f"{key} released")
 
-    if app.hue.dead:
+    if app.hue.dead or app.hue.won:
         return
 
     viewCheck(app)
@@ -893,7 +932,7 @@ def onKeyHold(app, keys):
     if app.debugging:
         print(f"{keys} on hold")
         
-    if app.hue.dead:
+    if app.hue.dead or app.hue.won:
         return
 
     viewCheck(app)
@@ -974,9 +1013,9 @@ def onStep(app):
     if app.debugging:
         print("onStep()")
     
-    if app.hue.dead:
+    if app.hue.dead or app.hue.won:
         return
-    if app.hue.y > 1000:
+    if app.hue.y > 1700:
         app.hue.dead = True
 
     app.hue.onLadder = False
@@ -1025,7 +1064,10 @@ def drawPalette(app):
         x4 = x0 + r1 * math.cos(beta)
         y4 = y0 - r1 * math.sin(beta)
 
-        drawPolygon(x1, y1, x2, y2, x3, y3, x4, y4, fill=app.colors[app.permutation[i]], border='white')
+        curColor = app.colors[app.permutation[i]]
+        if app.permutation[i] > app.colorSize:
+            curColor = 'black'
+        drawPolygon(x1, y1, x2, y2, x3, y3, x4, y4, fill=curColor, border='white')
 
 def redrawAll(app):
     if app.debugging:
@@ -1033,6 +1075,8 @@ def redrawAll(app):
     
     if app.mousePressed:
         drawRect(0, 0, app.width, app.height, opacity=50)
+    
+    app.door.draw()
 
     for g in app.grounds:
         g.draw()
@@ -1063,6 +1107,17 @@ def redrawAll(app):
     if app.hue.dead:
         drawRect(0, 0, app.width, app.height, fill='black', opacity=50)
         drawLabel("Game Over", app.width / 2, app.height / 2, fill='white', size=50)
+        drawLabel("Press r to start again", app.width / 2, app.height * 4 / 5, fill='white', size=20)
+
+    if app.hue.won:
+        drawRect(0, 0, app.width, app.height, fill='black', opacity=50)
+        
+        if app.level < app.maxLevel:
+            drawLabel("Level Completed!", app.width / 2, app.height / 2, fill='white', size=50)
+            drawLabel("Press Enter to start next level", app.width / 2, app.height * 4 / 5, fill='white', size=20)
+        else:
+            drawLabel("Game Completed!", app.width / 2, app.height / 2, fill='white', size=50)
+            drawLabel("Congratulations!", app.width / 2, app.height * 4 / 5, fill='white', size=20)
 
     if app.mousePressed:
         drawPalette(app)
