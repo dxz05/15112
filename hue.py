@@ -16,7 +16,6 @@ class Door:
         self.h = h
         self.level = level
 
-    def draw(self):
         x = self.x - myApp.viewLeft
         y = self.y - myApp.viewTop
         drawRect(x, y - self.h, self.w, self.h, fill=myApp.colors[0])
@@ -252,7 +251,7 @@ class Ground(Mover):
 
     def draw(self):
         x = self.x - myApp.viewLeft
-        y = self.y - myApp.viewTop     
+        y = self.y - myApp.viewTop
         drawRect(x, y, self.w, self.h, fill='black')
     
     def getDelta(self, x, y):
@@ -692,6 +691,7 @@ def startLevel(app, level):
     app.lasers = []
     app.door = Door(0, 0, level)
     app.level = level
+    app.legal = True
     
     gates = []
     buttons = []
@@ -830,7 +830,34 @@ def onAppStart(app):
 
     reset(app)
 
+def checkLegality(app):
+    for fx in range(2):
+        for fy in range(2):
+            x = app.hue.x + fx * app.hue.w
+            y = app.hue.y - fy * app.hue.h
+            
+            res = set()
+            for ba in app.barriers:
+                res = res.union(ba.getSides(x, y))
+            
+            for bl in app.blocks:
+                res = res.union(bl.getSides(x, y))
+            
+            if "left" in res:
+                return False
+
+            if "right" in res:
+                return False
+            
+            
+            if "inside" in res:
+                return False
+            
+    return True
+
 def onMousePress(app, mouseX, mouseY):
+    app.legal = checkLegality(app)
+
     if app.debugging:
         print("mouse pressed", mouseX, mouseY)
 
@@ -879,13 +906,14 @@ def onMouseRelease(app, mouseX, mouseY):
     if app.debugging:
         print("mouse released", mouseX, mouseY)
 
+    app.mousePressed = False
+
     app.speed = 1
     app.hue.vx = 0
-    app.mousePressed = False
 
     id = getNextColor(app, mouseX, mouseY)
     app.mouseColor = 0
-    if id != -1:
+    if id != -1 and app.legal:
         id = app.permutation[id - 1]
         app.background = app.colors[id]
 
@@ -1018,6 +1046,8 @@ def onStep(app):
     if app.hue.y > 1700:
         app.hue.dead = True
 
+    app.legal = checkLegality(app)
+
     app.hue.onLadder = False
     for l in app.ladders:
         if l.isInside(app.hue.x + app.hue.w / 2, app.hue.y):
@@ -1119,7 +1149,7 @@ def redrawAll(app):
             drawLabel("Game Completed!", app.width / 2, app.height / 2, fill='white', size=50)
             drawLabel("Congratulations!", app.width / 2, app.height * 4 / 5, fill='white', size=20)
 
-    if app.mousePressed:
+    if app.mousePressed and app.legal:
         drawPalette(app)
 
 def main():
