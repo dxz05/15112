@@ -2,7 +2,7 @@ from cmu_graphics import *
 import math
 import pathlib
 
-GAMEPATH = str(pathlib.Path(__file__).parent.resolve())
+GAMEPATH = str(pathlib.Path(__file__).parent.resolve()).replace('\\', '/')
 soundtrack = False # change it to True if you want music, it might take a while to download the song
 myApp = 0
 
@@ -117,7 +117,7 @@ class Hero(Mover):
         self.onLadder = False
         self.margin = w // 2
 
-        self.imageUrls = [None] + [f'{GAMEPATH}\\pic\\hue_{i}.png' for i in range(1, 19)]
+        self.imageUrls = [None] + [f'{GAMEPATH}/pic/hue_{i}.png' for i in range(1, 19)]
 
         self.direction = "right"
         self.condition = "steady"
@@ -700,7 +700,7 @@ def startLevel(app, level):
         app.colorSize = 8
 
     global GAMEPATH
-    f = open(f"{GAMEPATH}\\levels\\level{level}.txt", "r")
+    f = open(f"{GAMEPATH}/levels/level{level}.txt", "r")
     for s in f.read().splitlines():
         data = list(s.split())
         obj = data[0]
