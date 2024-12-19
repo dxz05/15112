@@ -4,7 +4,7 @@ The game is based on the videogame named Hue (2016) developed by Fiddlesticks an
 
 Demo: https://www.youtube.com/watch?v=obG3s-t2r3g
 
-To play the game, download and extract all files into one folder. Folder should contain hue.py, folder pic, and folder levels. Run hue.py to start the game.
+To play the game, download and extract all files into one folder. That folder should contain hue.py, folder pic, and folder levels. Run hue.py to start the game.
 
 Controls:
 wasd -> movement
