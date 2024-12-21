@@ -3,8 +3,7 @@ import math
 import pathlib
 
 GAMEPATH = str(pathlib.Path(__file__).parent.resolve()).replace('\\', '/')
-soundtrack = False # change it to True if you want music, it might take a while to download the song
-myApp = 0
+myApp = None
 
 class Door:
     def __init__(self, x, y, level, w = 50, h = 50):
@@ -808,10 +807,8 @@ def reset(app):
     viewCheck(app)
 
 def onAppStart(app):
-    global soundtrack
-    if soundtrack:
-        app.soundtrack = Sound("https://web2.qatar.cmu.edu/~dzk/hue_soundtrack.mp3")
-        app.soundtrack.play(restart=True, loop=True)
+    app.theme = Sound('sounds/hue_soundtrack.mp3')
+    app.theme.play()
 
     app.debugging = False
     app.maxLevel = 2
