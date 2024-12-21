@@ -4,7 +4,7 @@
 
 This is my term project for the course 15112 - Fundamentals of Programming and Computer Science at Carnegie Mellon University Qatar.
 
-The game is based on the videogame named Hue (2016) developed by Fiddlesticks and published by Curve Digital.
+The game is based on the videogame named Hue (2016) developed by Fiddlesticks and published by Curve Digital. Music by [Alkis Livathinos](https://www.youtube.com/watch?v=gkntjUvYDDo).
 
 ## Demo 
 https://www.youtube.com/watch?v=obG3s-t2r3g
