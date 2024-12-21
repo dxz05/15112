@@ -6,7 +6,8 @@ This is my term project for the course 15112 - Fundamentals of Programming and C
 
 The game is based on the videogame named Hue (2016) developed by Fiddlesticks and published by Curve Digital.
 
-Demo: https://www.youtube.com/watch?v=obG3s-t2r3g
+## Demo 
+https://www.youtube.com/watch?v=obG3s-t2r3g
 
 ## How to play
 
